@@ -10,18 +10,28 @@ import numpy as np
 from core import utils
 from core.utils import freeze_all, unfreeze_all
 
+
+darknight_voc_weight_path = '/media/storage2/YOLO/WINE_AUS/models/darkknight_models/yolov4_voc_darknight.weights'
+output_path =  '/media/storage2/YOLO/WINE_AUS/models/hdf5_models/{}.h5'.format(cfg.MODEL_NAME)
+logdir = '/media/storage2/YOLO/WINE_AUS/logs/{}'.format(cfg.MODEL_NAME)
+
 flags.DEFINE_string('model', 'yolov4', 'yolov4, yolov3')
-flags.DEFINE_string('weights', './scripts/yolov4.weights', 'pretrained weights')
+flags.DEFINE_string('pretrained_model', darknight_voc_weight_path, 'pretrained model or weight')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
+flags.DEFINE_string('output_model_path', output_path, 'outputmodel path')
+flags.DEFINE_string('logdir', logdir, 'outputmodel path')
 
 def main(_argv):
-    physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    if len(physical_devices) > 0:
-        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    # tf.config.gpu.set_per_process_memory_fraction(0.75)
+    # tf.config.gpu.set_per_process_memory_growth(True)
+
+    # physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    # if len(physical_devices) > 0:
+    #     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
     trainset = Dataset(FLAGS, is_training=True)
     testset = Dataset(FLAGS, is_training=False)
-    logdir = "./data/log"
+    logdir = FLAGS.logdir
     isfreeze = False
     steps_per_epoch = len(trainset)
     first_stage_epochs = cfg.TRAIN.FISRT_STAGE_EPOCHS
@@ -60,25 +70,38 @@ def main(_argv):
             bbox_tensors.append(bbox_tensor)
 
     model = tf.keras.Model(input_layer, bbox_tensors)
-    model.summary()
-
-    if FLAGS.weights == None:
+    if FLAGS.pretrained_model is None:
         print("Training from scratch")
     else:
-        if FLAGS.weights.split(".")[len(FLAGS.weights.split(".")) - 1] == "weights":
-            utils.load_weights(model, FLAGS.weights, FLAGS.model, FLAGS.tiny)
+        print('Restoring weights from: %s ... ' % FLAGS.pretrained_model)
+        if FLAGS.pretrained_model.split(".")[-1] == "weights":
+            utils.load_weights(model, FLAGS.pretrained_model, FLAGS.model, FLAGS.tiny)
         else:
-            model.load_weights(FLAGS.weights)
-        print('Restoring weights from: %s ... ' % FLAGS.weights)
+            model.load_weights(FLAGS.pretrained_model)
 
+    model.summary()
 
     optimizer = tf.keras.optimizers.Adam()
-    if os.path.exists(logdir): shutil.rmtree(logdir)
+    # if os.path.exists(logdir): shutil.rmtree(logdir)
     writer = tf.summary.create_file_writer(logdir)
 
     # define training step function
     # @tf.function
-    def train_step(image_data, target):
+
+    def annotate_image(image_data, bbox_data):
+        new_images = []
+        for im, boxes in zip(image_data, bbox_data):
+            bboxes = np.expand_dims(boxes[:,:4], 0).astype(np.int32)
+            classes = np.expand_dims(boxes[:,4], 0)
+            valid_detections = np.array([len(boxes)], dtype=np.int32)
+            scores = np.array([[1.0]*len(boxes)], dtype=np.int32)
+            bboxes_stack = [bboxes, scores, classes, valid_detections]
+            annotated_im = utils.draw_bbox(im, bboxes_stack, is_cordinates_relative=False)
+            new_images.append(annotated_im)
+        return np.array(new_images)
+
+
+    def train_step(image_data, bbox_data, target):
         with tf.GradientTape() as tape:
             pred_result = model(image_data, training=True)
             giou_loss = conf_loss = prob_loss = 0
@@ -116,8 +139,10 @@ def main(_argv):
                 tf.summary.scalar("loss/giou_loss", giou_loss, step=global_steps)
                 tf.summary.scalar("loss/conf_loss", conf_loss, step=global_steps)
                 tf.summary.scalar("loss/prob_loss", prob_loss, step=global_steps)
+                tf.summary.image("training_image", annotate_image(image_data, bbox_data), step=global_steps)
+
             writer.flush()
-    def test_step(image_data, target):
+    def test_step(image_data, bbox_data, target):
         with tf.GradientTape() as tape:
             pred_result = model(image_data, training=True)
             giou_loss = conf_loss = prob_loss = 0
@@ -149,11 +174,12 @@ def main(_argv):
                 for name in freeze_layers:
                     freeze = model.get_layer(name)
                     unfreeze_all(freeze)
-        for image_data, target in trainset:
-            train_step(image_data, target)
-        for image_data, target in testset:
-            test_step(image_data, target)
-        model.save_weights("./checkpoints/yolov4")
+        for image_data, bbox_data, target in trainset:
+            train_step(image_data, bbox_data, target)
+        for image_data, bbox_data, target in testset:
+            test_step(image_data, bbox_data, target)
+        model.save(FLAGS.output_model_path)
+        model.save_weights("./test")
 
 if __name__ == '__main__':
     try:

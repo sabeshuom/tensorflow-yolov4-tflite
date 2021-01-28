@@ -35,7 +35,6 @@ def load_weights(model, weights_file, model_name='yolov4', is_tiny=False):
             output_pos = [93, 101, 109]
     wf = open(weights_file, 'rb')
     major, minor, revision, seen, _ = np.fromfile(wf, dtype=np.int32, count=5)
-
     j = 0
     for i in range(layer_size):
         conv_layer_name = 'conv2d_%d' %i if i > 0 else 'conv2d'
@@ -124,7 +123,7 @@ def image_preprocess(image, target_size, gt_boxes=None):
         gt_boxes[:, [1, 3]] = gt_boxes[:, [1, 3]] * scale + dh
         return image_paded, gt_boxes
 
-def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_label=True):
+def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_label=True, is_cordinates_relative=True):
     num_classes = len(classes)
     image_h, image_w, _ = image.shape
     hsv_tuples = [(1.0 * x / num_classes, 1., 1.) for x in range(num_classes)]
@@ -139,11 +138,14 @@ def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_la
     for i in range(num_boxes[0]):
         if int(out_classes[0][i]) < 0 or int(out_classes[0][i]) > num_classes: continue
         coor = out_boxes[0][i]
-        coor[0] = int(coor[0] * image_h)
-        coor[2] = int(coor[2] * image_h)
-        coor[1] = int(coor[1] * image_w)
-        coor[3] = int(coor[3] * image_w)
-
+        if is_cordinates_relative:
+            coor[0] = int(coor[0] * image_h)
+            coor[2] = int(coor[2] * image_h)
+            coor[1] = int(coor[1] * image_w)
+            coor[3] = int(coor[3] * image_w)
+        else:
+            xmin, ymin, xmax, ymax = coor
+            coor = [ymin, xmin, ymax, xmax]
         fontScale = 0.5
         score = out_scores[0][i]
         class_ind = int(out_classes[0][i])

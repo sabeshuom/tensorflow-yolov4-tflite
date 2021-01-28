@@ -3,15 +3,21 @@ from absl import app, flags, logging
 from absl.flags import FLAGS
 from core.yolov4 import YOLO, decode, filter_boxes
 import core.utils as utils
-from core.config import cfg
+from settings import dataset
 
-flags.DEFINE_string('weights', './data/yolov4.weights', 'path to weights file')
-flags.DEFINE_string('output', './checkpoints/yolov4-416', 'path to output')
 flags.DEFINE_boolean('tiny', False, 'is yolo-tiny or not')
 flags.DEFINE_integer('input_size', 416, 'define input size of export model')
-flags.DEFINE_float('score_thres', 0.2, 'define score threshold')
+flags.DEFINE_float('score_thres', 0.0, 'define score threshold')
 flags.DEFINE_string('framework', 'tf', 'define what framework do you want to convert (tf, trt, tflite)')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
+
+if dataset == "default":
+  flags.DEFINE_string('weights', '/media/storage2/datasets/WINE_AUS/models/yolov4.weights', 'path to weights file')
+  flags.DEFINE_string('output', './checkpoints/yolov4-416-default', 'path to output')
+
+if dataset == "wa":
+  flags.DEFINE_string('weights', './checkpoints_wa/yolov4.data-00000-of-00001', 'path to weights file')
+  flags.DEFINE_string('output', './checkpoints/yolov4-416-wa', 'path to output')
 
 def save_tf():
   STRIDES, ANCHORS, NUM_CLASS, XYSCALE = utils.load_config(FLAGS)

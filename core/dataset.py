@@ -73,7 +73,6 @@ class Dataset(object):
                                 class_num,
                             )
                         annotations.append(image_path + string)
-
         np.random.shuffle(annotations)
         return annotations
 
@@ -136,7 +135,8 @@ class Dataset(object):
             batch_lbboxes = np.zeros(
                 (self.batch_size, self.max_bbox_per_scale, 4), dtype=np.float32
             )
-
+            # batch_boxes = np.zeros((self.batch_size, 4), dtype=np.float32)
+            batch_boxes = []
             num = 0
             if self.batch_count < self.num_batchs:
                 while num < self.batch_size:
@@ -155,6 +155,7 @@ class Dataset(object):
                     ) = self.preprocess_true_boxes(bboxes)
 
                     batch_image[num, :, :, :] = image
+                    batch_boxes.append(bboxes)
                     batch_label_sbbox[num, :, :, :, :] = label_sbbox
                     batch_label_mbbox[num, :, :, :, :] = label_mbbox
                     batch_label_lbbox[num, :, :, :, :] = label_lbbox
@@ -168,7 +169,7 @@ class Dataset(object):
                 batch_larger_target = batch_label_lbbox, batch_lbboxes
 
                 return (
-                    batch_image,
+                    batch_image, batch_boxes,
                     (
                         batch_smaller_target,
                         batch_medium_target,

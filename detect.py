@@ -12,17 +12,32 @@ import cv2
 import numpy as np
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
+from settings import dataset
+import im_utils
 
 flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
-flags.DEFINE_string('weights', './checkpoints/yolov4-416',
-                    'path to weights file')
 flags.DEFINE_integer('size', 416, 'resize images to')
 flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
 flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
-flags.DEFINE_string('image', './data/kite.jpg', 'path to input image')
-flags.DEFINE_string('output', 'result.png', 'path to output image')
-flags.DEFINE_float('iou', 0.45, 'iou threshold')
-flags.DEFINE_float('score', 0.25, 'score threshold')
+
+
+if dataset == "default":
+    flags.DEFINE_string('image', './data/kite.jpg', 'path to input image')
+    flags.DEFINE_string('output', 'result_default.png', 'path to output image')
+    flags.DEFINE_string('weights', '/tmvcore/tensorflow-yolov4-tflite/checkpoints/yolov4-416-default',
+                    'path to weights file')
+    flags.DEFINE_float('iou', 0.45, 'iou threshold')
+    flags.DEFINE_float('score', 0.25, 'score threshold')
+
+
+if dataset == "wa":
+    flags.DEFINE_string('image', '/media/storage2/datasets/WINE_AUS/annotations/images/images_0/wineaus_00000.png', 'path to input image')
+    flags.DEFINE_string('weights', '/tmvcore/tensorflow-yolov4-tflite/checkpoints/yolov4-416-wa',
+                    'path to weights file')
+    flags.DEFINE_string('output', 'result_wa.png', 'path to output image')
+    flags.DEFINE_float('iou', 0.05, 'iou threshold')
+    flags.DEFINE_float('score', -0.1, 'score threshold')
+
 
 def main(_argv):
     config = ConfigProto()
@@ -32,8 +47,10 @@ def main(_argv):
     input_size = FLAGS.size
     image_path = FLAGS.image
 
+
     original_image = cv2.imread(image_path)
     original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+    original_image = np.array(im_utils.scale_pad_to_square(Image.fromarray(original_image), FLAGS.size))
 
     # image_data = utils.image_preprocess(np.copy(original_image), [input_size, input_size])
     image_data = cv2.resize(original_image, (input_size, input_size))
@@ -64,10 +81,11 @@ def main(_argv):
         infer = saved_model_loaded.signatures['serving_default']
         batch_data = tf.constant(images_data)
         pred_bbox = infer(batch_data)
+
         for key, value in pred_bbox.items():
             boxes = value[:, :, 0:4]
             pred_conf = value[:, :, 4:]
-
+    import pdb; pdb.set_trace()
     boxes, scores, classes, valid_detections = tf.image.combined_non_max_suppression(
         boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
         scores=tf.reshape(
